@@ -2,7 +2,7 @@
 # @Author: Charles Starr
 # @Date:   2016-09-09 13:37:14
 # @Last Modified by:   Charles Starr
-# @Last Modified time: 2016-09-09 15:09:08
+# @Last Modified time: 2016-09-09 17:57:55
 
 class Mass_Experiment(object):
 	#this class will be a container for all MS/MS spectra acquired in a single LC injection
@@ -25,20 +25,20 @@ class Mass_Experiment(object):
 					scan_number = int(ms_ms_data.next().strip('\n').split('.')[1]) #split string to get scan number
 					retention_time = float(ms_ms_data.next().strip('\n').split('=')[1]) #split string to get retention time
 					pep_mz, intensity = map(float, ms_ms_data.next().strip('\n').split('=')[1].split()) #split to get m/z and intensity
-					charge = int(ms_ms_data.next().strip('\n')[7])
-					peaks = []
+					charge = int(ms_ms_data.next().strip('\n')[7]) #get charge, questionable approach
+					peaks = [] #empty list to hold upcoming peak information
 					while True:
 						peak_line = ms_ms_data.next().strip('\n')
 						if peak_line != 'END IONS':
-							peaks.append(tuple(map(float, peak_line.split(' '))))
+							peaks.append(tuple(map(float, peak_line.split(' ')))) #add peak m/z and intensity
 						else:
-							ms_ms_list.append(MS_MS_Spectra(scan_number, retention_time, pep_mz, intensity,
-															charge, peaks))
+							ms_ms_list.append(MS_MS_Spectrum(scan_number, retention_time, pep_mz, intensity,
+															charge, peaks)) #create spectrum object
 							break
 		return ms_ms_list
 
 
-class MS_MS_Spectra(object):
+class MS_MS_Spectrum(object):
 	#this class will hold peak information for an individual MS/MS shot
 	def __init__(self, scan, rt, precursor_mz, precursor_intensity, precursor_charge, peaks):
 		self.scan_number = scan

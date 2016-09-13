@@ -64,7 +64,7 @@ class Library(object):
                 #masterLibrary = itertools.chain(*updatedLibs)
         for peptide_string in master_library_string:
             master_library_index.append(Peptide(peptide_string))
-        master_library_index.sort(reverse=True)
+        master_library_index.sort(reverse=False)
         return master_library_index
         
     def masterReplicator(self,residues,library):
@@ -106,6 +106,10 @@ class Peptide(object):
         self.x_series = []
         self.y_series = []
         self.z_series = []
+        self.match_attempts = 0
+        self.matches = 0
+        self.matches_per_attempt = 0
+        self.scan_ids = []
     
     def __lt__(self, other):
         return self.exact_mass < other.exact_mass
@@ -180,7 +184,11 @@ class Peptide(object):
             self.z_series.append(exact_mass)
         return
 
+    def calc_per_attempt(self):
+        if self.match_attempts:
+            self.matches_per_attempt = float(self.matches)/self.match_attempts
 
+'''
 def gen_library(infile):
     library = Library(infile)
     return library
@@ -200,4 +208,5 @@ for peptide in library.peptide_list:
     print peptide.x_series
     print peptide.y_series
     print peptide.z_series
+'''
     
