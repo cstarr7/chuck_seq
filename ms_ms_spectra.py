@@ -2,7 +2,8 @@
 # @Author: Charles Starr
 # @Date:   2016-09-09 13:37:14
 # @Last Modified by:   Charles Starr
-# @Last Modified time: 2016-09-09 17:57:55
+# @Last Modified time: 2016-09-14 01:00:34
+import pymzml
 
 class Mass_Experiment(object):
 	#this class will be a container for all MS/MS spectra acquired in a single LC injection
@@ -16,6 +17,9 @@ class Mass_Experiment(object):
 		if self.filetype == 'mgf':
 			ms_ms_spectra = self.parse_mgf()
 			return ms_ms_spectra
+		if self.filetype == 'mzml':
+			ms_ms_spectra = self.parse_mzml()
+			return ms_ms_spectra
 
 	def parse_mgf(self):
 		ms_ms_list = []
@@ -24,19 +28,43 @@ class Mass_Experiment(object):
 				if line == 'BEGIN IONS\n':
 					scan_number = int(ms_ms_data.next().strip('\n').split('.')[1]) #split string to get scan number
 					retention_time = float(ms_ms_data.next().strip('\n').split('=')[1]) #split string to get retention time
-					pep_mz, intensity = map(float, ms_ms_data.next().strip('\n').split('=')[1].split()) #split to get m/z and intensity
+					print scan_number
+					mz_intensity = ms_ms_data.next().strip('\n').split('=')[1]
+					try:
+						pep_mz, intensity = map(float, mz_intensity.split()) #split to get m/z and intensity
+					except:
+						pep_mz = float(mz_intensity)#sometimes no intensity so we have to deal separately
+						intensity = None
 					charge = int(ms_ms_data.next().strip('\n')[7]) #get charge, questionable approach
 					peaks = [] #empty list to hold upcoming peak information
 					while True:
 						peak_line = ms_ms_data.next().strip('\n')
 						if peak_line != 'END IONS':
-							peaks.append(tuple(map(float, peak_line.split(' ')))) #add peak m/z and intensity
+							peaks.append(tuple(map(float, peak_line.split(' ')))) #add peak m/z and intensity as tuple
 						else:
 							ms_ms_list.append(MS_MS_Spectrum(scan_number, retention_time, pep_mz, intensity,
 															charge, peaks)) #create spectrum object
 							break
 		return ms_ms_list
 
+	def parse_mzml(self):
+		msrun = pymzml.run.Reader(self.ms_datafile)
+		ms_ms_list = []
+		for i, spectrum in enumerate(msrun,1):
+			if spectrum['ms level'] == 2:
+				scan_number = i
+				retention_time = spectrum['MS:1000016']
+				pep_mz = spectrum['MS:1000744']
+				try:
+					intensity = spectrum['MS:1000042']
+				except:
+					intensity = 0
+				charge = spectrum['MS:1000041']
+				#fragment_type = spectrum['activation']
+				peaks = spectrum.peaks
+				ms_ms_list.append(MS_MS_Spectrum(scan_number, retention_time, pep_mz, intensity,
+															charge, peaks))
+		return ms_ms_list
 
 class MS_MS_Spectrum(object):
 	#this class will hold peak information for an individual MS/MS shot

@@ -2,7 +2,7 @@
 # @Author: Charles Starr
 # @Date:   2016-09-09 15:14:56
 # @Last Modified by:   Charles Starr
-# @Last Modified time: 2016-09-12 23:37:09
+# @Last Modified time: 2016-09-14 01:04:00
 import simple_library_constructor
 import ms_ms_spectra
 from pandas import DataFrame
@@ -61,23 +61,26 @@ class Mass_Matcher(object):
 		return walked_matches
 
 	def tally_match_attempts(self):
+		#does simple analysis across runs to get some descriptive parameters
 		for attempt in self.match_attempts:
 			attempt.library_peptide.match_attempts += 1
 			attempt.library_peptide.matches += attempt.matches
-			attempt.library_peptide.scan_ids.append(attempt.spectrum.scan_number)
+			attempt.library_peptide.scan_ids.append((attempt.spectrum.scan_number, attempt.matches))
 		for peptide in self.peptide_library.peptide_list:
+			peptide.scan_ids.sort(key=lambda x: x[1], reverse=True)
 			peptide.calc_per_attempt()
 
 	def matches_tofile(self):
+		#uses pandas dataframe to create a table and output an excel file for data summary
 		sorted_outlist = sorted(self.peptide_library.peptide_list, key=lambda x: x.match_attempts, reverse=True)
 		outframe = DataFrame({'Sequence':[peptide.sequence for peptide in sorted_outlist],
 						'Exact mass':[peptide.exact_mass for peptide in sorted_outlist],
-						'a ions':[peptide.a_series for peptide in sorted_outlist],
-						'b ions':[peptide.b_series for peptide in sorted_outlist],
-						'c ions':[peptide.c_series for peptide in sorted_outlist],
-						'x ions':[peptide.x_series for peptide in sorted_outlist],
-						'y ions':[peptide.y_series for peptide in sorted_outlist],
-						'z ions':[peptide.z_series for peptide in sorted_outlist],
+						'a ions':[peptide.ion_series['a_ions'] for peptide in sorted_outlist],
+						'b ions':[peptide.ion_series['b_ions'] for peptide in sorted_outlist],
+						'c ions':[peptide.ion_series['c_ions'] for peptide in sorted_outlist],
+						'x ions':[peptide.ion_series['x_ions'] for peptide in sorted_outlist],
+						'y ions':[peptide.ion_series['y_ions'] for peptide in sorted_outlist],
+						'z ions':[peptide.ion_series['z_ions'] for peptide in sorted_outlist],
 						'Match attempts':[peptide.match_attempts for peptide in sorted_outlist],
 						'Matches':[peptide.matches for peptide in sorted_outlist],
 						'Matches/attempt':[peptide.matches_per_attempt for peptide in sorted_outlist],
@@ -87,8 +90,6 @@ class Mass_Matcher(object):
 		outframe.to_excel(writer)
 		writer.save()
 
-
-
 class Match_Attempt(object):
 	#takes a single library peptide and experimental spectrum and ID's common ions
 	def __init__(self, spectrum, library_peptide, frag_type, tolerance):
@@ -96,67 +97,73 @@ class Match_Attempt(object):
 		self.library_peptide = library_peptide
 		self.frag_type = frag_type
 		self.tolerance = tolerance
-		self.matches = self.ion_search()
+		self.matched_ions = []
+		self.ion_search()
+		self.matches = len(self.matched_ions)
 
 	def ion_search(self):
 		#directs search to correct approach based on fragmentation method
 		if self.frag_type == 'ETD':
 			return self.etd_ion_search()
 		elif self.frag_type == 'HCD':
-			return self.hcd_ion_search()
+			return self.cid_ion_search()
 		elif self.frag_type == 'CID':
 			return self.cid_ion_search()
 		else:
 			return
 
 	def etd_ion_search(self):
-		#generate fragments if not already present
-		if not self.library_peptide.c_series:
+		#search for c and z ions in spectra created by etd fragmentation
+		#generates fragments if not already present
+		if not self.library_peptide.ion_series['c_ions']:
 			self.library_peptide.generate_c_ions()
-		if not self.library_peptide.z_series:
+		if not self.library_peptide.ion_series['z_ions']:
 			self.library_peptide.generate_z_ions()
-		matches = 0
-		c_matches = [] #keep track of matches in c_series so we don't double count in z series
-		for ion in self.library_peptide.c_series: #match c_ions with binary search
+		self.ion_binary_search('c_ions')
+		self.ion_binary_search('z_ions')
+		return
+
+	def cid_ion_search(self):
+		#search for b and b ions in spectra created by etd fragmentation
+		#generates fragments if not already present
+		if not self.library_peptide.ion_series['b_ions']:
+			self.library_peptide.generate_c_ions()
+		if not self.library_peptide.ion_series['y_ions']:
+			self.library_peptide.generate_z_ions()
+		self.ion_binary_search('b_ions')
+		self.ion_binary_search('y_ions')
+		return
+
+	def ion_binary_search(self, ion_type):
+		#searches an experimental spectrum ions of a specified type
+		for ion in self.library_peptide.ion_series[ion_type]: #match c_ions with binary search
 			start = 0
 			end = len(self.spectrum.peaks) - 1
 			while start <= end:
 				index = (start + end)/2
 				if abs(ion - self.spectrum.peaks[index][0]) < self.tolerance:
-					matches += 1
-					c_matches.append(self.spectrum.peaks[index])
+					if self.spectrum.peaks[index] not in self.matched_ions:
+						self.matched_ions.append(self.spectrum.peaks[index])
+					else:
+						self.matched_ions.extend(self.walk_spectrum(ion, index))
 					break
 				elif ion - self.spectrum.peaks[index][0] < 0:
 					end = index - 1
 				else:
 					start = index + 1
-		for ion in self.library_peptide.z_series: #match z_ions with binary search
-			start = 0
-			end = len(self.spectrum.peaks) - 1
-			while start <= end:
-				index = (start + end)/2
-				if abs(ion - self.spectrum.peaks[index][0]) < self.tolerance:
-					if self.spectrum.peaks[index] not in c_matches:
-						matches += 1
-					else:
-						if self.walk_spectrum(ion, index):
-							matches += 1
-					break					
-				elif ion - self.spectrum.peaks[index][0] < 0:
-					end = index - 1
-				else:
-					start = index + 1
-		return matches
+		return
 
 	def walk_spectrum(self, ion, index):
-		#walks spectrum in the case of matching a z ion to one already covered in the c search
+		#in the case that a matched ion has already been found in a different search
 		#to see if there are any other ions that would match the criterion
 		up_ion = abs(ion - self.spectrum.peaks[index + 1][0])
 		down_ion = abs(ion - self.spectrum.peaks[index - 1][0])
-		if up_ion <= self.tolerance or down_ion <= self.tolerance:
-			return True
-		return False
-
+		if up_ion <= self.tolerance:
+			return [self.spectrum.peaks[index + 1]]
+		elif down_ion <= self.tolerance:
+			return [self.spectrum.peaks[index -1]]
+		else:
+			return []
 
 
 

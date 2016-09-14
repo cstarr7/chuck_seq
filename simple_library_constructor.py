@@ -9,37 +9,8 @@ Created on Mon Oct 05 15:50:24 2015
 #a list of potentially varied residues
 
 import csv
+from atomic_mass_data import *
 #global dictionaries that contain static mass information for sequence construction
-amino_acid_map = {'R': 100.087472,
-                    'Q': 72.044939,
-                    'F': 91.054775,
-                    'Y': 107.04969,
-                    'W': 130.065674,
-                    'K': 72.081324,
-                    'G': 1.007825,
-                    'A': 15.023475,
-                    'H': 81.045273,
-                    'S': 31.01839,
-                    'P': 41.039125,
-                    'E': 73.028955,
-                    'D': 59.013305,
-                    'T': 45.03404,
-                    'C': 46.995547,
-                    'M': 75.026847,
-                    'L': 57.070425,
-                    'N': 58.029289,
-                    'I': 57.070425,
-                    'V': 43.054775}
-
-termini_map = {'bond': 56.013639,
-                'normal_n': 16.018724,
-                'c_amide': 57.021464,
-                'a_terminus': 13.007825,
-                'b_terminus': 41.00274,
-                'c_terminus': 58.029289,
-                'x_terminus': 43.005814,
-                'y_terminus': 17.026549,
-                'z_terminus': 0.000000}
 
 class Library(object):
     
@@ -100,12 +71,12 @@ class Peptide(object):
     def __init__(self, sequence):     
         self.sequence = sequence
         self.exact_mass = self.exact_mass_calculator()
-        self.a_series = []
-        self.b_series = []
-        self.c_series = []
-        self.x_series = []
-        self.y_series = []
-        self.z_series = []
+        self.ion_series ={'a_ions':[],
+                        'b_ions':[],
+                        'c_ions':[],
+                        'x_ions':[],
+                        'y_ions':[],
+                        'z_ions':[]}
         self.match_attempts = 0
         self.matches = 0
         self.matches_per_attempt = 0
@@ -134,7 +105,7 @@ class Peptide(object):
             exact_mass = self.residue_mass(subseq)
             exact_mass += termini_map['normal_n']
             exact_mass += termini_map['a_terminus']
-            self.a_series.append(exact_mass)
+            self.ion_series['a_ions'].append(exact_mass)
         return
 
     def generate_b_ions(self):
@@ -143,7 +114,7 @@ class Peptide(object):
             exact_mass = self.residue_mass(subseq)
             exact_mass += termini_map['normal_n']
             exact_mass += termini_map['b_terminus']
-            self.b_series.append(exact_mass)
+            self.ion_series['b_ions'].append(exact_mass)
         return
 
     def generate_c_ions(self):
@@ -152,8 +123,8 @@ class Peptide(object):
             exact_mass = self.residue_mass(subseq)
             exact_mass += termini_map['normal_n']
             exact_mass += termini_map['c_terminus']
-            self.c_series.append(exact_mass)
-        self.c_series.pop(-1)
+            self.ion_series['c_ions'].append(exact_mass)
+        self.ion_series['c_ions'].pop(-1)
         return
 
     def generate_x_ions(self):
@@ -162,8 +133,8 @@ class Peptide(object):
             exact_mass = self.residue_mass(subseq)
             exact_mass += termini_map['c_amide']
             exact_mass += termini_map['x_terminus']
-            self.x_series.append(exact_mass)
-        self.x_series.pop(0)
+            self.ion_series['x_ions'].append(exact_mass)
+        self.ion_series['x_ions'].pop(0)
         return
 
     def generate_y_ions(self):
@@ -172,7 +143,7 @@ class Peptide(object):
             exact_mass = self.residue_mass(subseq)
             exact_mass += termini_map['c_amide']
             exact_mass += termini_map['y_terminus']
-            self.y_series.append(exact_mass)
+            self.ion_series['y_ions'].append(exact_mass)
         return
 
     def generate_z_ions(self):
@@ -181,7 +152,7 @@ class Peptide(object):
             exact_mass = self.residue_mass(subseq)
             exact_mass += termini_map['c_amide']
             exact_mass += termini_map['z_terminus']
-            self.z_series.append(exact_mass)
+            self.ion_series['z_ions'].append(exact_mass)
         return
 
     def calc_per_attempt(self):
