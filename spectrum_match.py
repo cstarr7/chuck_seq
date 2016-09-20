@@ -2,19 +2,27 @@
 # @Author: Charles Starr
 # @Date:   2016-09-09 15:14:56
 # @Last Modified by:   Charles Starr
-# @Last Modified time: 2016-09-14 01:04:00
+# @Last Modified time: 2016-09-20 17:21:24
+
+# This module intergrates a Library object and MassExperiment object
+# and attempts to align theoretical ions with real spectra
+
 import simple_library_constructor
 import ms_ms_spectra
 from pandas import DataFrame
 from pandas import ExcelWriter
 
-class Mass_Matcher(object):
-	#class will contain the library and experimental spectrum data and pick library members to 
-	#attempt to match theoretical ions with experimental ones based on precursor exact mass
-	def __init__(self, experiment, library, frag_type, tolerance, outfile):
+
+class MassMatcher(object):
+	# Class will contain the library and experimental spectrum data and
+	# pick library members to attempt to match theoretical ions with 
+	# experimental ones based on precursor exact mass
+
+
+	def __init__(self, experiment, library, tolerance, outfile):
+
 		self.mass_experiment = experiment
 		self.peptide_library = library
-		self.frag_type = frag_type
 		self.tolerance = tolerance
 		self.outfile = outfile
 		self.match_attempts = self.scan_ms_ms()
@@ -22,57 +30,92 @@ class Mass_Matcher(object):
 		self.matches_tofile()
 
 	def scan_ms_ms(self):
-		#iterates through list of ms/ms spectra selecting one at a time for analysis
+		# Iterates through list of ms/ms spectra selecting one at a 
+		# time for analysis
+
 		potential_matches = []
+
 		for spectrum in self.mass_experiment.ms_ms_spectra:
 			new_matches = self.search_library(spectrum.precursor_exact_mass)
-			potential_matches.append([Match_Attempt(spectrum, peptide, self.frag_type, self.tolerance) for peptide in new_matches])
-		return [match for matches in potential_matches for match in matches]
+			potential_matches.extend([MatchAttempt(
+				spectrum, peptide, spectrum.activation_method, self.tolerance)
+				for peptide in new_matches]
+				)
+		
+		return potential_matches
 
 	def search_library(self, spectrum_exact_mass):
+		# Binary search for library peptides that match precursor
+
 		start = 0
 		end = len(self.peptide_library.peptide_list) - 1
-		matches = []
+		matches = [] # Holds peptides that match
+
 		while start <= end:
 			index = (start+end)/2
 			library_peptide = self.peptide_library.peptide_list[index]
-			if abs(library_peptide.exact_mass - spectrum_exact_mass) < self.tolerance: #library peptide within tolerance?
-				matches.append(library_peptide) #add id'd peptide to matches
-				neighbor_matches = self.walk_library(index, spectrum_exact_mass) #walk up and down list until no matches
-				matches.extend(neighbor_matches) #add walked matches to matches
+			
+			if abs(library_peptide.exact_mass 
+				- spectrum_exact_mass) < self.tolerance:
+				matches.append(library_peptide)
+				neighbor = self.walk_library(index, spectrum_exact_mass)
+				matches.extend(neighbor) 
 				break
+			
 			elif library_peptide.exact_mass - spectrum_exact_mass < 0:
 				start = index + 1
+			
 			else:
 				end = index - 1
+
 		return matches
 
 	def walk_library(self, index, spectrum_exact_mass):
-		#walk up and down the peptide list from first identified match to find all matches
+		# Finds peptides adjacent to the initially matched library member
+
 		walked_matches = []
 		up_index = index + 1
-		down_index = index - 1
-		while abs(self.peptide_library.peptide_list[up_index].exact_mass - spectrum_exact_mass) < self.tolerance:
+		dn_index = index - 1
+
+		while abs(self.peptide_library.peptide_list[up_index].exact_mass 
+			- spectrum_exact_mass) < self.tolerance:
 			walked_matches.append(self.peptide_library.peptide_list[up_index])
 			up_index += 1
-		while abs(self.peptide_library.peptide_list[down_index].exact_mass - spectrum_exact_mass) < self.tolerance:
-			walked_matches.append(self.peptide_library.peptide_list[down_index])
-			down_index -= 1
+		
+		while abs(self.peptide_library.peptide_list[dn_index].exact_mass 
+			- spectrum_exact_mass) < self.tolerance:
+			walked_matches.append(self.peptide_library.peptide_list[dn_index])
+			dn_index -= 1
+		
 		return walked_matches
 
 	def tally_match_attempts(self):
-		#does simple analysis across runs to get some descriptive parameters
+		# Does simple analysis on peptides that were matched
+
 		for attempt in self.match_attempts:
-			attempt.library_peptide.match_attempts += 1
-			attempt.library_peptide.matches += attempt.matches
-			attempt.library_peptide.scan_ids.append((attempt.spectrum.scan_number, attempt.matches))
+			match_dic = attempt.library_peptide.match_dict
+			match_dic[attempt.activation_method]['match attempts'] += 1
+			match_dic[attempt.activation_method]['matches'] += attempt.matches
+			attempt.library_peptide.scan_ids.append(
+				(attempt.spectrum.scan_number, attempt.matches,
+				 attempt.activation_method)
+				)
+
 		for peptide in self.peptide_library.peptide_list:
 			peptide.scan_ids.sort(key=lambda x: x[1], reverse=True)
 			peptide.calc_per_attempt()
 
+		return
+
 	def matches_tofile(self):
-		#uses pandas dataframe to create a table and output an excel file for data summary
-		sorted_outlist = sorted(self.peptide_library.peptide_list, key=lambda x: x.match_attempts, reverse=True)
+		# Uses pandas dataframe to create a table and output an 
+		# excel file for data summary.
+		
+		sorted_outlist = sorted(
+			self.peptide_library.peptide_list, 
+			key=lambda x: x.exact_mass, reverse=True
+			)
+		# Breaking line length timit to format the output for the program
 		outframe = DataFrame({'Sequence':[peptide.sequence for peptide in sorted_outlist],
 						'Exact mass':[peptide.exact_mass for peptide in sorted_outlist],
 						'a ions':[peptide.ion_series['a_ions'] for peptide in sorted_outlist],
@@ -81,64 +124,100 @@ class Mass_Matcher(object):
 						'x ions':[peptide.ion_series['x_ions'] for peptide in sorted_outlist],
 						'y ions':[peptide.ion_series['y_ions'] for peptide in sorted_outlist],
 						'z ions':[peptide.ion_series['z_ions'] for peptide in sorted_outlist],
-						'Match attempts':[peptide.match_attempts for peptide in sorted_outlist],
-						'Matches':[peptide.matches for peptide in sorted_outlist],
-						'Matches/attempt':[peptide.matches_per_attempt for peptide in sorted_outlist],
+						'CID Match attempts':[peptide.match_dict['cid']['match attempts'] for peptide in sorted_outlist],
+						'CID Matches':[peptide.match_dict['cid']['matches'] for peptide in sorted_outlist],
+						'CID Matches/attempt':[peptide.match_dict['cid']['matches/attempt'] for peptide in sorted_outlist],
+						'HCD Match attempts':[peptide.match_dict['hcd']['match attempts'] for peptide in sorted_outlist],
+						'HCD Matches':[peptide.match_dict['hcd']['matches'] for peptide in sorted_outlist],
+						'HCD Matches/attempt':[peptide.match_dict['hcd']['matches/attempt'] for peptide in sorted_outlist],
+						'ETD Match attempts':[peptide.match_dict['etd']['match attempts'] for peptide in sorted_outlist],
+						'ETD Matches':[peptide.match_dict['etd']['matches'] for peptide in sorted_outlist],
+						'ETD Matches/attempt':[peptide.match_dict['etd']['matches/attempt'] for peptide in sorted_outlist],
 						'Scan IDs':[peptide.scan_ids for peptide in sorted_outlist]})
+		
+		# Reorders columns in dataframe
+		outframe = outframe[
+			['Sequence', 'Exact mass', 'CID Match attempts', 'CID Matches',
+			 'CID Matches/attempt',	'HCD Match attempts', 'HCD Matches',
+			 'HCD Matches/attempt', 'ETD Match attempts', 'ETD Matches',
+			 'ETD Matches/attempt', 'Scan IDs', 'a ions', 'b ions', 'c ions', 
+			 'x ions', 'y ions', 'z ions']
+			 ]
+
 		outframe.set_index('Sequence', inplace=True)
 		writer = ExcelWriter(self.outfile)
 		outframe.to_excel(writer)
 		writer.save()
 
-class Match_Attempt(object):
-	#takes a single library peptide and experimental spectrum and ID's common ions
-	def __init__(self, spectrum, library_peptide, frag_type, tolerance):
+		return
+
+
+class MatchAttempt(object):
+	# Takes a single library peptide and experimental spectrum and
+	# identifies ions that are present in both the theoretical and 
+	# real spectra
+
+
+	def __init__(self, spectrum, library_peptide, activation, tolerance):
+
 		self.spectrum = spectrum
 		self.library_peptide = library_peptide
-		self.frag_type = frag_type
+		self.activation_method = activation
 		self.tolerance = tolerance
 		self.matched_ions = []
 		self.ion_search()
 		self.matches = len(self.matched_ions)
 
 	def ion_search(self):
-		#directs search to correct approach based on fragmentation method
-		if self.frag_type == 'ETD':
+		# Directs search to correct approach based on activation method
+
+		if self.activation_method == 'etd':
 			return self.etd_ion_search()
-		elif self.frag_type == 'HCD':
+
+		elif self.activation_method == 'hcd':
 			return self.cid_ion_search()
-		elif self.frag_type == 'CID':
+
+		elif self.activation_method == 'cid':
 			return self.cid_ion_search()
+
 		else:
 			return
 
 	def etd_ion_search(self):
-		#search for c and z ions in spectra created by etd fragmentation
-		#generates fragments if not already present
+		# Search for c/z ions in spectra created by etd fragmentation
+		# Generates fragments if not already present
+
 		if not self.library_peptide.ion_series['c_ions']:
 			self.library_peptide.generate_c_ions()
 		if not self.library_peptide.ion_series['z_ions']:
 			self.library_peptide.generate_z_ions()
+
 		self.ion_binary_search('c_ions')
 		self.ion_binary_search('z_ions')
+		
 		return
 
 	def cid_ion_search(self):
-		#search for b and b ions in spectra created by etd fragmentation
-		#generates fragments if not already present
+		# Search for b/y ions in spectra created by CID/HCD fragmentation
+		# Generates fragments if not already present
+
 		if not self.library_peptide.ion_series['b_ions']:
-			self.library_peptide.generate_c_ions()
+			self.library_peptide.generate_b_ions()
 		if not self.library_peptide.ion_series['y_ions']:
-			self.library_peptide.generate_z_ions()
+			self.library_peptide.generate_y_ions()
+
 		self.ion_binary_search('b_ions')
 		self.ion_binary_search('y_ions')
+		
 		return
 
 	def ion_binary_search(self, ion_type):
-		#searches an experimental spectrum ions of a specified type
-		for ion in self.library_peptide.ion_series[ion_type]: #match c_ions with binary search
+		# Searches an experimental spectrum ions of a specified type
+
+		for ion in self.library_peptide.ion_series[ion_type]:
 			start = 0
 			end = len(self.spectrum.peaks) - 1
+			
 			while start <= end:
 				index = (start + end)/2
 				if abs(ion - self.spectrum.peaks[index][0]) < self.tolerance:
@@ -151,13 +230,17 @@ class Match_Attempt(object):
 					end = index - 1
 				else:
 					start = index + 1
+		
 		return
 
 	def walk_spectrum(self, ion, index):
-		#in the case that a matched ion has already been found in a different search
-		#to see if there are any other ions that would match the criterion
+		# In the case that a matched ion has already been found in a 
+		# different ion series, check to see if there are any other 
+		# ions that would match the criterion
+
 		up_ion = abs(ion - self.spectrum.peaks[index + 1][0])
 		down_ion = abs(ion - self.spectrum.peaks[index - 1][0])
+		
 		if up_ion <= self.tolerance:
 			return [self.spectrum.peaks[index + 1]]
 		elif down_ion <= self.tolerance:
