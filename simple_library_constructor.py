@@ -129,6 +129,7 @@ class Peptide(object):
                 }
 
         self.scan_ids = [] # MS/MS scans matches to peptide
+        self.precursor_intensities = []
     
     def __lt__(self, other):
 

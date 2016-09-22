@@ -2,7 +2,7 @@
 # @Author: Charles Starr
 # @Date:   2016-09-09 13:37:14
 # @Last Modified by:   Charles Starr
-# @Last Modified time: 2016-09-20 16:34:08
+# @Last Modified time: 2016-09-22 16:29:05
 
 # The purpose of this module is to handle MS/MS data from a variety of 
 # input formats. It currently supports mgf and mzml filetypes. The 
@@ -81,7 +81,7 @@ class MassExperiment(object):
 	def parse_mzml(self):
 		# Instructions for parsing an mzml file.
 
-		msrun = pymzml.run.Reader(self.ms_datafile)
+		msrun = pymzml.run.Reader(self.ms_datafile, extraAccessions=[('MS:1000042', ['value'])])
 		ms_ms_list = []
 
 		for i, spectrum in enumerate(msrun,1):
@@ -90,7 +90,6 @@ class MassExperiment(object):
 				retention_time = spectrum['MS:1000016']
 				pep_mz = spectrum['MS:1000744']
 				# Sometimes there is no intensity value.
-
 				try:
 					intensity = spectrum['MS:1000042']
 				except:

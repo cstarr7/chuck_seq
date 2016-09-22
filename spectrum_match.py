@@ -2,7 +2,7 @@
 # @Author: Charles Starr
 # @Date:   2016-09-09 15:14:56
 # @Last Modified by:   Charles Starr
-# @Last Modified time: 2016-09-20 17:21:24
+# @Last Modified time: 2016-09-22 16:59:09
 
 # This module intergrates a Library object and MassExperiment object
 # and attempts to align theoretical ions with real spectra
@@ -11,7 +11,8 @@ import simple_library_constructor
 import ms_ms_spectra
 from pandas import DataFrame
 from pandas import ExcelWriter
-
+from numpy import mean, median
+from itertools import chain
 
 class MassMatcher(object):
 	# Class will contain the library and experimental spectrum data and
@@ -96,9 +97,14 @@ class MassMatcher(object):
 			match_dic = attempt.library_peptide.match_dict
 			match_dic[attempt.activation_method]['match attempts'] += 1
 			match_dic[attempt.activation_method]['matches'] += attempt.matches
-			attempt.library_peptide.scan_ids.append(
-				(attempt.spectrum.scan_number, attempt.matches,
-				 attempt.activation_method)
+			attempt.library_peptide.scan_ids.append((
+				attempt.spectrum.scan_number, attempt.matches,
+				attempt.activation_method,
+				map(lambda x: "%.2f" % x, [ions[0] for ions in attempt.matched_ions])
+				)
+			)
+			attempt.library_peptide.precursor_intensities.append(
+				attempt.spectrum.precursor_intensity
 				)
 
 		for peptide in self.peptide_library.peptide_list:
@@ -118,12 +124,14 @@ class MassMatcher(object):
 		# Breaking line length timit to format the output for the program
 		outframe = DataFrame({'Sequence':[peptide.sequence for peptide in sorted_outlist],
 						'Exact mass':[peptide.exact_mass for peptide in sorted_outlist],
-						'a ions':[peptide.ion_series['a_ions'] for peptide in sorted_outlist],
-						'b ions':[peptide.ion_series['b_ions'] for peptide in sorted_outlist],
-						'c ions':[peptide.ion_series['c_ions'] for peptide in sorted_outlist],
-						'x ions':[peptide.ion_series['x_ions'] for peptide in sorted_outlist],
-						'y ions':[peptide.ion_series['y_ions'] for peptide in sorted_outlist],
-						'z ions':[peptide.ion_series['z_ions'] for peptide in sorted_outlist],
+						'Precursor median':[median(peptide.precursor_intensities) if peptide.precursor_intensities else 0 for peptide in sorted_outlist],
+						'Precursor mean':[mean(peptide.precursor_intensities) if peptide.precursor_intensities else 0 for peptide in sorted_outlist],
+						'a ions':[map(lambda x: "%.2f" % x, peptide.ion_series['a_ions']) for peptide in sorted_outlist],
+						'b ions':[map(lambda x: "%.2f" % x,peptide.ion_series['b_ions']) for peptide in sorted_outlist],
+						'c ions':[map(lambda x: "%.2f" % x,peptide.ion_series['c_ions']) for peptide in sorted_outlist],
+						'x ions':[map(lambda x: "%.2f" % x,peptide.ion_series['x_ions']) for peptide in sorted_outlist],
+						'y ions':[map(lambda x: "%.2f" % x,peptide.ion_series['y_ions']) for peptide in sorted_outlist],
+						'z ions':[map(lambda x: "%.2f" % x,peptide.ion_series['z_ions']) for peptide in sorted_outlist],
 						'CID Match attempts':[peptide.match_dict['cid']['match attempts'] for peptide in sorted_outlist],
 						'CID Matches':[peptide.match_dict['cid']['matches'] for peptide in sorted_outlist],
 						'CID Matches/attempt':[peptide.match_dict['cid']['matches/attempt'] for peptide in sorted_outlist],
@@ -137,12 +145,14 @@ class MassMatcher(object):
 		
 		# Reorders columns in dataframe
 		outframe = outframe[
-			['Sequence', 'Exact mass', 'CID Match attempts', 'CID Matches',
-			 'CID Matches/attempt',	'HCD Match attempts', 'HCD Matches',
-			 'HCD Matches/attempt', 'ETD Match attempts', 'ETD Matches',
-			 'ETD Matches/attempt', 'Scan IDs', 'a ions', 'b ions', 'c ions', 
-			 'x ions', 'y ions', 'z ions']
+			['Sequence', 'Precursor median', 'Precursor mean', 'Exact mass',
+			 'CID Match attempts', 'CID Matches', 'CID Matches/attempt',
+			 'HCD Match attempts', 'HCD Matches', 'HCD Matches/attempt', 
+			 'ETD Match attempts', 'ETD Matches', 'ETD Matches/attempt', 
+			 'Scan IDs', 'a ions', 'b ions', 'c ions', 'x ions', 'y ions', 
+			 'z ions'
 			 ]
+		]
 
 		outframe.set_index('Sequence', inplace=True)
 		writer = ExcelWriter(self.outfile)
@@ -167,6 +177,7 @@ class MatchAttempt(object):
 		self.matched_ions = []
 		self.ion_search()
 		self.matches = len(self.matched_ions)
+
 
 	def ion_search(self):
 		# Directs search to correct approach based on activation method
