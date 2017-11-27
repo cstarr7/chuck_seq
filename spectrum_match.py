@@ -2,7 +2,7 @@
 # @Author: Charles Starr
 # @Date:   2016-09-09 15:14:56
 # @Last Modified by:   Charles Starr
-# @Last Modified time: 2016-09-22 16:59:09
+# @Last Modified time: 2017-11-27 14:59:18
 
 # This module intergrates a Library object and MassExperiment object
 # and attempts to align theoretical ions with real spectra
@@ -20,11 +20,13 @@ class MassMatcher(object):
 	# experimental ones based on precursor exact mass
 
 
-	def __init__(self, experiment, library, tolerance, outfile):
+	def __init__(self, experiment, library, tolerance, outfile, rt_low, rt_high):
 
 		self.mass_experiment = experiment
 		self.peptide_library = library
 		self.tolerance = tolerance
+		self.rt_low = rt_low
+		self.rt_high = rt_high
 		self.outfile = outfile
 		self.match_attempts = self.scan_ms_ms()
 		self.tally_match_attempts()
@@ -37,11 +39,12 @@ class MassMatcher(object):
 		potential_matches = []
 
 		for spectrum in self.mass_experiment.ms_ms_spectra:
-			new_matches = self.search_library(spectrum.precursor_exact_mass)
-			potential_matches.extend([MatchAttempt(
-				spectrum, peptide, spectrum.activation_method, self.tolerance)
-				for peptide in new_matches]
-				)
+			if spectrum.rt >= self.rt_low and spectrum.rt <= self.rt_high:
+				new_matches = self.search_library(spectrum.precursor_exact_mass)
+				potential_matches.extend([MatchAttempt(
+					spectrum, peptide, spectrum.activation_method, self.tolerance)
+					for peptide in new_matches]
+					)
 		
 		return potential_matches
 

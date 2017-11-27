@@ -2,7 +2,7 @@
 # @Author: Charles Starr
 # @Date:   2016-09-09 13:37:14
 # @Last Modified by:   Charles Starr
-# @Last Modified time: 2016-09-22 16:29:05
+# @Last Modified time: 2017-11-27 15:03:15
 
 # The purpose of this module is to handle MS/MS data from a variety of 
 # input formats. It currently supports mgf and mzml filetypes. The 
@@ -116,7 +116,7 @@ class MSMSSpectrum(object):
 		):
 		
 		self.scan_number = scan
-		self.retention_time = rt
+		self.rt = rt
 		self.precursor_mz = precursor_mz
 		self.precursor_intensity = precursor_intensity
 		self.precursor_charge = precursor_charge
