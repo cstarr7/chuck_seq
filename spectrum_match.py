@@ -2,7 +2,7 @@
 # @Author: Charles Starr
 # @Date:   2016-09-09 15:14:56
 # @Last Modified by:   Charles Starr
-# @Last Modified time: 2017-11-27 14:59:18
+# @Last Modified time: 2017-11-28 13:48:21
 
 # This module intergrates a Library object and MassExperiment object
 # and attempts to align theoretical ions with real spectra
@@ -11,7 +11,7 @@ import simple_library_constructor
 import ms_ms_spectra
 from pandas import DataFrame
 from pandas import ExcelWriter
-from numpy import mean, median
+import numpy
 from itertools import chain
 
 class MassMatcher(object):
@@ -100,6 +100,7 @@ class MassMatcher(object):
 			match_dic = attempt.library_peptide.match_dict
 			match_dic[attempt.activation_method]['match attempts'] += 1
 			match_dic[attempt.activation_method]['matches'] += attempt.matches
+			match_dic[attempt.activation_method]['match score'] += attempt.match_score
 			attempt.library_peptide.scan_ids.append((
 				attempt.spectrum.scan_number, attempt.matches,
 				attempt.activation_method,
@@ -113,6 +114,7 @@ class MassMatcher(object):
 		for peptide in self.peptide_library.peptide_list:
 			peptide.scan_ids.sort(key=lambda x: x[1], reverse=True)
 			peptide.calc_per_attempt()
+			peptide.calc_total_score()
 
 		return
 
@@ -122,13 +124,13 @@ class MassMatcher(object):
 		
 		sorted_outlist = sorted(
 			self.peptide_library.peptide_list, 
-			key=lambda x: x.exact_mass, reverse=True
+			key=lambda x: x.total_score, reverse=True
 			)
 		# Breaking line length timit to format the output for the program
 		outframe = DataFrame({'Sequence':[peptide.sequence for peptide in sorted_outlist],
 						'Exact mass':[peptide.exact_mass for peptide in sorted_outlist],
-						'Precursor median':[median(peptide.precursor_intensities) if peptide.precursor_intensities else 0 for peptide in sorted_outlist],
-						'Precursor mean':[mean(peptide.precursor_intensities) if peptide.precursor_intensities else 0 for peptide in sorted_outlist],
+						'Precursor median':[numpy.median(peptide.precursor_intensities) if peptide.precursor_intensities else 0 for peptide in sorted_outlist],
+						'Precursor mean':[numpy.mean(peptide.precursor_intensities) if peptide.precursor_intensities else 0 for peptide in sorted_outlist],
 						'a ions':[map(lambda x: "%.2f" % x, peptide.ion_series['a_ions']) for peptide in sorted_outlist],
 						'b ions':[map(lambda x: "%.2f" % x,peptide.ion_series['b_ions']) for peptide in sorted_outlist],
 						'c ions':[map(lambda x: "%.2f" % x,peptide.ion_series['c_ions']) for peptide in sorted_outlist],
@@ -138,21 +140,25 @@ class MassMatcher(object):
 						'CID Match attempts':[peptide.match_dict['cid']['match attempts'] for peptide in sorted_outlist],
 						'CID Matches':[peptide.match_dict['cid']['matches'] for peptide in sorted_outlist],
 						'CID Matches/attempt':[peptide.match_dict['cid']['matches/attempt'] for peptide in sorted_outlist],
+						'CID Match Score':[peptide.match_dict['cid']['match score'] for peptide in sorted_outlist],
 						'HCD Match attempts':[peptide.match_dict['hcd']['match attempts'] for peptide in sorted_outlist],
 						'HCD Matches':[peptide.match_dict['hcd']['matches'] for peptide in sorted_outlist],
 						'HCD Matches/attempt':[peptide.match_dict['hcd']['matches/attempt'] for peptide in sorted_outlist],
+						'HCD Match Score':[peptide.match_dict['hcd']['match score'] for peptide in sorted_outlist],
 						'ETD Match attempts':[peptide.match_dict['etd']['match attempts'] for peptide in sorted_outlist],
 						'ETD Matches':[peptide.match_dict['etd']['matches'] for peptide in sorted_outlist],
 						'ETD Matches/attempt':[peptide.match_dict['etd']['matches/attempt'] for peptide in sorted_outlist],
+						'ETD Match Score':[peptide.match_dict['etd']['match score'] for peptide in sorted_outlist],
+						'Total Match Score':[peptide.total_score for peptide in sorted_outlist],
 						'Scan IDs':[peptide.scan_ids for peptide in sorted_outlist]})
 		
 		# Reorders columns in dataframe
 		outframe = outframe[
 			['Sequence', 'Precursor median', 'Precursor mean', 'Exact mass',
-			 'CID Match attempts', 'CID Matches', 'CID Matches/attempt',
-			 'HCD Match attempts', 'HCD Matches', 'HCD Matches/attempt', 
-			 'ETD Match attempts', 'ETD Matches', 'ETD Matches/attempt', 
-			 'Scan IDs', 'a ions', 'b ions', 'c ions', 'x ions', 'y ions', 
+			 'CID Match attempts', 'CID Matches', 'CID Matches/attempt', 'CID Match Score',
+			 'HCD Match attempts', 'HCD Matches', 'HCD Matches/attempt', 'HCD Match Score',
+			 'ETD Match attempts', 'ETD Matches', 'ETD Matches/attempt', 'ETD Match Score',
+			 'Total Match Score', 'Scan IDs', 'a ions', 'b ions', 'c ions', 'x ions', 'y ions', 
 			 'z ions'
 			 ]
 		]
@@ -180,6 +186,7 @@ class MatchAttempt(object):
 		self.matched_ions = []
 		self.ion_search()
 		self.matches = len(self.matched_ions)
+		self.match_score = self.matches * spectrum.precursor_intensity
 
 
 	def ion_search(self):

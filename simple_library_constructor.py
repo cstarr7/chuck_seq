@@ -125,10 +125,12 @@ class Peptide(object):
             self.match_dict[activation_method] = {
                 'match attempts':0, 
                 'matches':0, 
-                'matches/attempt':0
+                'matches/attempt':0,
+                'match score':0
                 }
 
         self.scan_ids = [] # MS/MS scans matches to peptide
+        self.total_score = 0
         self.precursor_intensities = []
     
     def __lt__(self, other):
@@ -247,6 +249,16 @@ class Peptide(object):
                     )
 
         return
+
+    def calc_total_score(self):
+        # Calculate the sum of the match scores
+
+        for key in self.match_dict.iterkeys():
+            self.total_score += self.match_dict[key]['match score']
+
+        return
+
+
 
 
     
