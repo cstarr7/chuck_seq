@@ -2,7 +2,7 @@
 # @Author: Charles Starr
 # @Date:   2016-09-09 15:14:56
 # @Last Modified by:   Charles Starr
-# @Last Modified time: 2017-11-28 13:48:21
+# @Last Modified time: 2017-11-28 15:46:05
 
 # This module intergrates a Library object and MassExperiment object
 # and attempts to align theoretical ions with real spectra
@@ -81,15 +81,21 @@ class MassMatcher(object):
 		up_index = index + 1
 		dn_index = index - 1
 
-		while abs(self.peptide_library.peptide_list[up_index].exact_mass 
-			- spectrum_exact_mass) < self.tolerance:
-			walked_matches.append(self.peptide_library.peptide_list[up_index])
-			up_index += 1
+		try:
+			while abs(self.peptide_library.peptide_list[up_index].exact_mass 
+				- spectrum_exact_mass) < self.tolerance:
+				walked_matches.append(self.peptide_library.peptide_list[up_index])
+				up_index += 1
+		except:
+			pass
 		
-		while abs(self.peptide_library.peptide_list[dn_index].exact_mass 
-			- spectrum_exact_mass) < self.tolerance:
-			walked_matches.append(self.peptide_library.peptide_list[dn_index])
-			dn_index -= 1
+		try:
+			while abs(self.peptide_library.peptide_list[dn_index].exact_mass 
+				- spectrum_exact_mass) < self.tolerance:
+				walked_matches.append(self.peptide_library.peptide_list[dn_index])
+				dn_index -= 1
+		except:
+			pass
 		
 		return walked_matches
 
@@ -259,15 +265,21 @@ class MatchAttempt(object):
 		# different ion series, check to see if there are any other 
 		# ions that would match the criterion
 
-		up_ion = abs(ion - self.spectrum.peaks[index + 1][0])
-		down_ion = abs(ion - self.spectrum.peaks[index - 1][0])
+		try:
+			up_ion = abs(ion - self.spectrum.peaks[index + 1][0])
+			if up_ion <= self.tolerance:
+				return [self.spectrum.peaks[index + 1]]
+		except:
+			pass
+
+		try:
+			down_ion = abs(ion - self.spectrum.peaks[index - 1][0])
+			if down_ion <= self.tolerance:
+				return [self.spectrum.peaks[index -1]]
+		except:
+			pass
 		
-		if up_ion <= self.tolerance:
-			return [self.spectrum.peaks[index + 1]]
-		elif down_ion <= self.tolerance:
-			return [self.spectrum.peaks[index -1]]
-		else:
-			return []
+		return []
 
 
 
